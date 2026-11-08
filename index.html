@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Kitchen Word Hunt</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+--bg:#fbf6ee;--card:#fff;--ink:#2b2118;--mute:#7a6a5a;--line:#e6d9c6;--acc:#c8512b;--acc2:#2f7d5b;--sel:#ffd98a;--found:#bfe3cf}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1d1813;--card:#2a231c;--ink:#f3eadc;--mute:#b3a48f;--line:#4a3f33;--acc:#ec7a52;--acc2:#5fc191;--sel:#8a6a1f;--found:#285843}}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Georgia,"Times New Roman",serif;min-height:100vh;display:flex;flex-direction:column;align-items:center}
+main{width:100%;max-width:640px;padding:16px 12px;flex:1}
+h1{font-size:1.7rem;margin:4px 0;text-align:center;color:var(--acc)}
+.sub{text-align:center;color:var(--mute);margin:0 0 12px;font-family:system-ui,sans-serif;font-size:.9rem}
+.levels{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-bottom:12px;font-family:system-ui,sans-serif}
+.levels button{border:2px solid var(--line);background:var(--card);color:var(--ink);border-radius:20px;padding:6px 12px;font-weight:600;cursor:pointer}
+.levels button.on{background:var(--acc);border-color:var(--acc);color:#fff}
+.levels button.done::after{content:" ✓";color:var(--acc2)}
+.levels button.on.done::after{color:#fff}
+.bar{display:flex;justify-content:space-between;align-items:center;font-family:system-ui,sans-serif;font-size:.95rem;margin-bottom:8px;gap:8px;flex-wrap:wrap}
+.bar b{color:var(--acc)}
+.bar button,.again{border:0;background:var(--acc2);color:#fff;border-radius:8px;padding:7px 12px;font-weight:600;cursor:pointer;font-family:system-ui,sans-serif}
+#grid{display:grid;width:min(94vw,540px);margin:0 auto;background:var(--card);border:2px solid var(--line);border-radius:12px;padding:6px;touch-action:none;user-select:none;-webkit-user-select:none;gap:2px}
+.c{aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-family:system-ui,sans-serif;font-weight:700;font-size:calc(min(94vw,540px)/var(--n)*.5);border-radius:6px;cursor:pointer}
+.c.s{background:var(--sel)}
+.c.f{background:var(--found)}
+.c.h{outline:3px solid var(--acc)}
+#words{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin:14px 0;padding:0;list-style:none;font-family:system-ui,sans-serif}
+#words li{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:4px 10px;font-size:.85rem;font-weight:600;letter-spacing:.04em}
+#words li.f{background:var(--found);text-decoration:line-through;color:var(--mute)}
+#msg{text-align:center;min-height:2.6em;font-family:system-ui,sans-serif}
+.win{background:var(--card);border:2px solid var(--acc2);border-radius:12px;padding:12px;margin-top:8px}
+footer{width:100%;text-align:center;padding:14px 10px 18px;border-top:1px solid var(--line);color:var(--ink);font-family:system-ui,sans-serif;font-size:1.25rem;font-weight:600}
+</style>
+</head>
+<body>
+<main>
+<h1>Kitchen Word Hunt</h1>
+<p class="sub">Find the hidden words. Drag across the letters to select a word.</p>
+<div class="levels" id="levels"></div>
+<div class="bar"><span id="theme"></span><span>Time: <b id="time">0:00</b></span><span>Found: <b id="cnt">0</b></span><button id="hint">Hint</button></div>
+<div id="grid"></div>
+<ul id="words"></ul>
+<div id="msg"></div>
+</main>
+<footer>Nannestad High School- Barbara Anna Zielonka</footer>
+<script>
+const LV=[
+{t:"Level 1: Kitchen basics",n:8,d:[[0,1],[1,0]],w:["KNIFE","OVEN","PLATE","CHEF","SOUP","MENU"]},
+{t:"Level 2: Restaurant service",n:10,d:[[0,1],[1,0],[1,1]],w:["WAITER","TABLE","ORDER","TRAY","APRON","SERVE","BILL","GUEST"]},
+{t:"Level 3: Food safety",n:12,d:[[0,1],[1,0],[1,1],[0,-1],[-1,0]],w:["HYGIENE","BACTERIA","ALLERGEN","CLEAN","STORAGE","GLOVES","FRIDGE","LABEL","SAFETY","WASH"]},
+{t:"Level 4: Cooking techniques",n:14,d:[[0,1],[1,0],[1,1],[0,-1],[-1,0],[-1,-1],[1,-1],[-1,1]],w:["ROAST","GRILL","BRAISE","POACH","BLANCH","SAUTE","SIMMER","WHISK","FILLET","MARINATE","KNEAD","STEAM"]},
+{t:"Level 5: Food processing",n:15,d:[[0,1],[1,0],[1,1],[0,-1],[-1,0],[-1,-1],[1,-1],[-1,1]],w:["HACCP","PASTEURISE","CANNING","PACKAGING","FERMENTING","FREEZING","DRYING","SMOKING","BLENDING","CONVEYOR","STERILISE","TRACEABILITY","SHELFLIFE","INSPECTION"]}
+];
+const $=id=>document.getElementById(id);
+let cur=0,G,N,placed,found,start=null,path=[],timer,secs,done=new Set();
+function build(){
+  const L=LV[cur];N=L.n;
+  for(let tries=0;tries<50;tries++){
+    G=Array.from({length:N},()=>Array(N).fill(""));placed=[];let ok=true;
+    for(const w of [...L.w].sort((a,b)=>b.length-a.length)){
+      let p=false;
+      for(let k=0;k<300&&!p;k++){
+        const [dr,dc]=L.d[Math.random()*L.d.length|0];
+        const r=Math.random()*N|0,c=Math.random()*N|0;
+        const er=r+dr*(w.length-1),ec=c+dc*(w.length-1);
+        if(er<0||er>=N||ec<0||ec>=N)continue;
+        let fit=true;
+        for(let i=0;i<w.length;i++){const g=G[r+dr*i][c+dc*i];if(g&&g!==w[i]){fit=false;break}}
+        if(!fit)continue;
+        const cells=[];
+        for(let i=0;i<w.length;i++){G[r+dr*i][c+dc*i]=w[i];cells.push([r+dr*i,c+dc*i])}
+        placed.push({w,cells});p=true;
+      }
+      if(!p){ok=false;break}
+    }
+    if(ok)break;
+  }
+  const A="ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  for(let r=0;r<N;r++)for(let c=0;c<N;c++)if(!G[r][c])G[r][c]=A[Math.random()*26|0];
+  found=new Set();
+  const g=$("grid");g.style.gridTemplateColumns=`repeat(${N},1fr)`;g.style.setProperty("--n",N);
+  g.innerHTML="";
+  for(let r=0;r<N;r++)for(let c=0;c<N;c++){const d=document.createElement("div");d.className="c";d.dataset.r=r;d.dataset.c=c;d.textContent=G[r][c];g.appendChild(d)}
+  $("words").innerHTML=[...L.w].sort().map(w=>`<li data-w="${w}">${w}</li>`).join("");
+  $("theme").textContent=L.t;$("msg").innerHTML="";upd();
+  clearInterval(timer);secs=0;$("time").textContent="0:00";
+  timer=setInterval(()=>{secs++;$("time").textContent=Math.floor(secs/60)+":"+String(secs%60).padStart(2,"0")},1000);
+}
+function upd(){$("cnt").textContent=found.size+" / "+LV[cur].w.length}
+function tabs(){
+  $("levels").innerHTML=LV.map((_,i)=>`<button class="${i===cur?"on ":""}${done.has(i)?"done":""}" data-i="${i}">Level ${i+1}</button>`).join("");
+  document.querySelectorAll("#levels button").forEach(b=>b.onclick=()=>{cur=+b.dataset.i;tabs();build()});
+}
+const cellAt=(x,y)=>{const e=document.elementFromPoint(x,y);return e&&e.classList.contains("c")?e:null};
+function line(a,b){
+  const r1=+a.dataset.r,c1=+a.dataset.c,r2=+b.dataset.r,c2=+b.dataset.c,dr=r2-r1,dc=c2-c1;
+  if(!(dr===0||dc===0||Math.abs(dr)===Math.abs(dc)))return [[r1,c1]];
+  const n=Math.max(Math.abs(dr),Math.abs(dc)),sr=Math.sign(dr),sc=Math.sign(dc),o=[];
+  for(let i=0;i<=n;i++)o.push([r1+sr*i,c1+sc*i]);return o;
+}
+const el=(r,c)=>$("grid").children[r*N+c];
+function paint(){document.querySelectorAll(".c.s").forEach(e=>e.classList.remove("s"));path.forEach(([r,c])=>el(r,c).classList.add("s"))}
+const gd=$("grid");
+gd.addEventListener("pointerdown",e=>{const c=cellAt(e.clientX,e.clientY);if(!c)return;e.preventDefault();start=c;path=[[+c.dataset.r,+c.dataset.c]];paint()});
+gd.addEventListener("pointermove",e=>{if(!start)return;const c=cellAt(e.clientX,e.clientY);if(!c)return;path=line(start,c);paint()});
+window.addEventListener("pointerup",()=>{
+  if(!start)return;start=null;
+  const s=path.map(([r,c])=>G[r][c]).join(""),rev=[...s].reverse().join("");
+  const m=placed.find(p=>!found.has(p.w)&&(p.w===s||p.w===rev));
+  document.querySelectorAll(".c.s").forEach(e=>e.classList.remove("s"));
+  if(m){
+    found.add(m.w);m.cells.forEach(([r,c])=>{const e=el(r,c);e.classList.add("f");e.classList.remove("h")});
+    document.querySelector(`#words li[data-w="${m.w}"]`).classList.add("f");
+    $("msg").textContent="Well done! You found "+m.w+".";upd();
+    if(found.size===placed.length)win();
+  }
+  path=[];
+});
+function win(){
+  clearInterval(timer);done.add(cur);tabs();
+  const last=cur===LV.length-1;
+  $("msg").innerHTML=`<div class="win"><b>${last?"You finished all 5 levels! Great work, future professional.":"Level complete!"}</b><br>Time: ${$("time").textContent}<br><br><button class="again" id="nx">${last?"Play level 1 again":"Next level"}</button></div>`;
+  $("nx").onclick=()=>{cur=last?0:cur+1;tabs();build()};
+}
+$("hint").onclick=()=>{
+  const left=placed.filter(p=>!found.has(p.w));if(!left.length)return;
+  document.querySelectorAll(".c.h").forEach(e=>e.classList.remove("h"));
+  const p=left[Math.random()*left.length|0];el(...p.cells[0]).classList.add("h");
+  $("msg").textContent="Hint: a word starting at the highlighted letter has "+p.w.length+" letters.";
+};
+tabs();build();
+</script>
+</body>
+</html>
